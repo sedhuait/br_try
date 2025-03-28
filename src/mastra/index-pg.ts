@@ -5,19 +5,19 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { z } from "zod";
 import { createLogger } from "@mastra/core/logger";
-import { PineconeVector } from "@mastra/pinecone";
 import { MDocument } from "@mastra/rag";
 import { embed } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { insightsAgent } from "./agents/insights";
+import { PgVector } from "@mastra/pg";
 
 // Constants
-const PINECONE_INDEX_NAME = "test-project-data-v2";
-const EMBEDDING_DIMENSION = 1536; // text-embedding-3-small dimension
+const PG_CONNECTION_STRING = 'postgresql://postgres:postgres@localhost:5432/mydb';
 
-// Initialize Pinecone with proper configuration
-const pineconeStore = new PineconeVector(process.env.PINECONE_API_KEY!);
+// Initialize PostgreSQL store
+const pgStore = new PgVector(PG_CONNECTION_STRING);
 
+// Initialize Mastra with the PostgreSQL store
 export const mastra = new Mastra({
   agents: {
     extractorAgent,
@@ -28,64 +28,9 @@ export const mastra = new Mastra({
     level: "debug",
   }),
   vectors: {
-    pinecone: pineconeStore,
+    postgres: pgStore,
   },
 });
-
-async function deleteIndex(indexName: string) {
-  try {
-    console.log(`Attempting to delete index: ${indexName}`);
-    await pineconeStore.deleteIndex(indexName);
-    console.log(`Successfully deleted index: ${indexName}`);
-  } catch (error) {
-    console.error(`Error deleting index: ${indexName}`, error);
-    throw error;
-  }
-}
-
-async function ensurePineconeIndex() {
-  try {
-    const indexes = await pineconeStore.listIndexes();
-    console.log("Available indexes:", indexes);
-
-    if (!indexes.includes(PINECONE_INDEX_NAME)) {
-      console.log(`Creating Pinecone index: ${PINECONE_INDEX_NAME}`);
-      await pineconeStore.createIndex({
-        indexName: PINECONE_INDEX_NAME,
-        dimension: EMBEDDING_DIMENSION, // Using correct dimension for text-embedding-3-small
-        metric: "cosine",
-      });
-      console.log("Index created successfully");
-    } else {
-      // Check if existing index has correct dimension
-      const indexStats = await pineconeStore.describeIndex(PINECONE_INDEX_NAME);
-      if (indexStats.dimension !== EMBEDDING_DIMENSION) {
-        console.log(
-          `Warning: Existing index has dimension ${indexStats.dimension}, but we need ${EMBEDDING_DIMENSION}`
-        );
-        console.log(
-          "Deleting existing index and recreating with correct dimension..."
-        );
-        await deleteIndex(PINECONE_INDEX_NAME);
-        await pineconeStore.createIndex({
-          indexName: PINECONE_INDEX_NAME,
-          dimension: EMBEDDING_DIMENSION,
-          metric: "cosine",
-        });
-        console.log("Index recreated successfully with correct dimension");
-      } else {
-        console.log(
-          `Index ${PINECONE_INDEX_NAME} already exists with correct dimension`
-        );
-      }
-    }
-  } catch (error) {
-    mastra
-      .getLogger()
-      .error("Error ensuring Pinecone index exists:", { error });
-    throw error;
-  }
-}
 
 export async function processJsonFile() {
   try {
@@ -163,8 +108,11 @@ export async function processJsonFile() {
 
 export async function processRag() {
   try {
-    // Ensure index exists before processing
-    // await ensurePineconeIndex();
+    // Create index if it doesn't exist
+    await pgStore.createIndex({
+      indexName: "embeddings",
+      dimension: 1536, // For text-embedding-3-small
+    });
 
     const filePath = path.resolve("./src/data/synth_data_60_day_full.json");
     const txt = await fs.readFile(filePath, "utf-8");
@@ -191,9 +139,7 @@ export async function processRag() {
           },
         });
 
-        console.log(
-          `Created ${chunks.length} chunks, generating embeddings...`
-        );
+        console.log(`Created ${chunks.length} chunks, generating embeddings...`);
 
         // Create embeddings for each chunk
         const embeddingPromises = chunks.map(async (chunk) => {
@@ -213,13 +159,11 @@ export async function processRag() {
 
         for (const batch of batches) {
           const embeddings = await Promise.all(batch);
-          console.log(
-            `Generated ${embeddings.length} embeddings, uploading to Pinecone...`
-          );
+          console.log(`Generated ${embeddings.length} embeddings, uploading to PostgreSQL...`);
 
-          // Store chunks in Pinecone
-          await pineconeStore.upsert({
-            indexName: PINECONE_INDEX_NAME,
+          // Store chunks in PostgreSQL
+          await pgStore.upsert({
+            indexName: "embeddings",
             vectors: embeddings,
             metadata: chunks.map((chunk) => ({
               text: chunk.text,
@@ -229,9 +173,7 @@ export async function processRag() {
             })),
           });
 
-          console.log(
-            `Successfully stored ${chunks.length} chunks in Pinecone`
-          );
+          console.log(`Successfully stored ${chunks.length} chunks in PostgreSQL`);
         }
       }
     }
@@ -241,5 +183,5 @@ export async function processRag() {
   }
 }
 
-// processRag();
+processRag();
 // processJsonFile();
