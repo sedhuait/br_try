@@ -1,8 +1,9 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { Agent } from "@mastra/core";
+import { Agent } from "@mastra/core/agent";
+import { Memory } from "@mastra/memory";
 
 export const extractorAgent = new Agent({
-    name: 'Extractor Agent',
+    name: 'Project Extractor Agent',
     instructions: `
         You are a helpful data extractor from given data.
   
@@ -14,5 +15,14 @@ export const extractorAgent = new Agent({
         - Add any additional useful fields
   `,
     model: anthropic('claude-3-5-sonnet-20241022'),
+    memory: new Memory({
+        options: {
+          workingMemory: {
+            enabled: true, // enables working memory
+          },
+          lastMessages: 5000, // Only keep recent context
+        },
+      }), 
+    
   });
   

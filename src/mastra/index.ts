@@ -1,8 +1,10 @@
-
-import { createLogger, Mastra } from '@mastra/core';
+import 'dotenv/config';
+import {  Mastra } from '@mastra/core';
 import { extractorAgent } from './agents/extractor';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { z } from 'zod';
+import { createLogger } from '@mastra/core/logger';
 
 export const mastra = new Mastra({
     agents: { 
@@ -10,7 +12,7 @@ export const mastra = new Mastra({
       },
       logger: createLogger({
         name: 'Mastra',
-        level: 'debug',
+        level: 'info',
       }),
 })
 
@@ -32,9 +34,35 @@ export async function processJsonFile() {
                [
                 {
                     role: 'user',
-                    content: entry
+                    content: "extract data from following content: " + JSON.stringify(entry, null, 2)
                 }
-               ]
+               ],
+               {
+                output: z.object({
+                    projects: z.array(z.object({
+                        name: z.string(),
+                        owner: z.string(),
+                        description: z.string(),
+                        goals: z.array(z.string()),
+                        timeline: z.object({
+                            startDate: z.string(),
+                            endDate: z.string()
+                        })
+                    })),
+                    teams: z.array(z.object({
+                        name: z.string(),
+                        members: z.array(z.object({
+                            name: z.string(),
+                            role: z.string()
+                        })),
+                        department: z.string(),
+                        objectives: z.array(z.string())
+                    })),
+                    insights: z.array(z.string()),
+                    additionalInfo: z.object({})
+                })
+            }
+               
             );
             console.log(JSON.stringify(result, null, 2));
             break;
