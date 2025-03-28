@@ -8,14 +8,15 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/src/mastra/index.ts",
-            "runtimeArgs": [
-                "--loader",
-                "ts-node/esm"
-            ],
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/tsx",
+            "args": ["${workspaceFolder}/src/mastra/index.ts"],
             "sourceMaps": true,
-            "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-            "console": "integratedTerminal"
+            "resolveSourceMapLocations": [
+                "${workspaceFolder}/**",
+                "!**/node_modules/**"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}"
         }
     ]
 } 
